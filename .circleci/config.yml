@@ -1,13 +1,63 @@
-# Use the latest 2.1 version of CircleCI pipeline process engine. See: https://circleci.com/docs/2.0/configuration-reference
-version: 2.1
-# Use a package of configuration called an orb.
-orbs:
-  # Declare a dependency on the welcome-orb
-  welcome: circleci/welcome-orb@0.4.1
-# Orchestrate or schedule a set of jobs
-workflows:
-  # Name the workflow "welcome"
-  welcome:
-    # Run the welcome/run job in its own container
-    jobs:
-      - welcome/run
+name: Building GSI
+
+on:
+#  release:
+#    types: [published]
+#  push:
+#    branches:
+#      - master
+#    paths:
+#      - '.config'
+#  schedule:
+#    - cron: 0 8 * * 5
+  watch:
+    types: [started]
+    
+env:
+  ROM: ExtendedUI
+  TZ: Asia/Kolkata
+  MIR: bit
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+       - name: Checkout
+         uses: actions/checkout@master
+           
+       - name: Initializing environment
+         run: |
+            sudo -E apt-get -qq update
+            sudo -E apt-get -qq install git openjdk-8-jdk wget
+       
+       - name: Clone ErfanGSI Source Code
+         run: git clone https://github.com/yukosky/ErfanGSIs -b runner
+       
+       - name: Setting up ErfanGSI requirements
+         run: |
+              sudo chmod -R 777 ErfanGSIs
+              cd ErfanGSIs
+              sudo bash setup.sh
+       
+       - name: Download Firmware & Generate GSI & Zip and Upload
+         run:  |
+               sudo ./ErfanGSIs/url2GSI.sh https://ufpr.dl.sourceforge.net/project/extendedui/polaris/ExtendedUI_1.2.1_polaris-10.0-20200621-2134-OFFICIAL.zip Generic:ExtendedUI
+               mkdir final
+               
+               export date2=`date +%Y%m%d%H%M`
+               export sourcever2=`cat ./ErfanGSIs/ver`
+               sudo chmod -R 777 ErfanGSIs/output
+               
+               curl -sL https://git.io/file-transfer | sh
+               
+               zip -r ErfanGSIs/output/$ROM-Aonly-$sourcever2-$date2-ErfanGSI-YuMiGSI.7z ErfanGSIs/output/*-Aonly-*.img
+               ./transfer $MIR ErfanGSIs/output/$ROM-Aonly-$sourcever2-$date2-ErfanGSI-YuMiGSI.7z
+               
+               zip -r ErfanGSIs/output/$ROM-AB-$sourcever2-$date2-ErfanGSI-YuMiGSI.7z  ErfanGSIs/output/*-AB-*.img
+               ./transfer $MIR ErfanGSIs/output/$ROM-AB-$sourcever2-$date2-ErfanGSI-YuMiGSI.7z
+                  
+       - name: Print build info
+         run: |
+              cat ErfanGSIs/output/*-Aonly-*.txt
+              echo "--------"
+              cat ErfanGSIs/output/*-AB-*.txt
